@@ -1,5 +1,5 @@
 # -*- coding: utf8 -*-
-import win32gui, win32process, win32ui, memory_profiler, win32api
+import win32gui, win32process, win32ui, win32api#, memory_profiler
 import time, sys, traceback
 import os, signal, datetime
 import threading
@@ -10,7 +10,7 @@ from pynput.mouse import Listener
 from pynput import keyboard 
 
 
-
+#@profile
 def res():
     ct = time.time()
     while True:
@@ -31,11 +31,12 @@ threading.Thread(target=res).start()
 #Only one executable
 #def getpid(process_name):
 #    return [item.split()[1] for item in os.popen('tasklist').read().splitlines()[4:] if process_name in item.split()]
-
+#@profile
 def get_processes(pname):
     processes = str(subprocess.Popen('wmic PROCESS WHERE NAME="'+pname+'" GET * /format:csv <nul', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).communicate()[0])
     return [[x.split(',')[0],x.split('\\'+pname+',,')[1].split(',')[0]] for x in processes.split('\\'+pname+'" ,Win32_Process,')[1:]]
 
+#@profile
 def kill_same_process(pname):
     #current_pid = os.getpid()
     #process_pid = getpid(pname)
@@ -96,7 +97,7 @@ sound_reinit = PATH+'\\Audio\\reinit.mp3'
 
 #@profile
 def default_users_variables():
-    global KEY_CODE, MOUSE_CODE, IDLE, VALIDATING_DURATION, TIME_TO_RECONNECT, FORBIDENS, PATHS, AUDIO, CHECK_RECONNECT
+    global KEY_CODE, MOUSE_CODE, IDLE, VALIDATING_DURATION, TIME_TO_RECONNECT, FORBIDENS, PATHS, AUDIO, CHECK_RECONNECT, LIGHT
     KEY_CODE = ['menu']
     MOUSE_CODE = ['left', 'left', 'left']
     IDLE = 25*60
@@ -105,7 +106,8 @@ def default_users_variables():
     TIME_TO_RECONNECT = 5
     FORBIDENS = ['mot1','mot2','mot3']
     PATHS = ['']
-    AUDIO = 1
+    AUDIO = 0
+    LIGHT = 1
     file = open(PATH+'\\parameters.txt','w',encoding='utf-8')
     file.write('KEY_CODE:'+str(KEY_CODE)+'\n')
     file.write('MOUSE_CODE:'+str(MOUSE_CODE)+'\n')
@@ -116,6 +118,7 @@ def default_users_variables():
     file.write('FORBIDENS:'+str(FORBIDENS)+'\n')
     file.write('PATHS:'+str(PATHS)+'\n')
     file.write('AUDIO:'+str(AUDIO)+'\n')
+    file.write('LIGHT:'+str(LIGHT)+'\n')
     file.close()
 
 
@@ -149,7 +152,7 @@ def play(arg=11): #11 = silence, 12 = ding
 #@profile
 ###########VARIABLES PERSONNELLES
 def check_users_variables():
-    global KEY_CODE, MOUSE_CODE, IDLE, VALIDATING_DURATION, TIME_TO_RECONNECT, FORBIDENS, PATHS, AUDIO, CHECK_RECONNECT
+    global KEY_CODE, MOUSE_CODE, IDLE, VALIDATING_DURATION, TIME_TO_RECONNECT, FORBIDENS, PATHS, AUDIO, CHECK_RECONNECT, LIGHT
     try:
         file = open(PATH+'\\parameters.txt','r',encoding='utf-8')
         txt = file.readlines()
@@ -180,6 +183,7 @@ def check_users_variables():
             else:
                 threading.Thread(target=play, args=(sound_pt,)).start()
         AUDIO = int(txt[8][len('AUDIO:'):])
+        LIGHT = int(txt[9][len('LIGHT:'):])
     except Exception as e:
         exc_type, exc_value, exc_tb = sys.exc_info()
         tb = str(traceback.TracebackException(exc_type, exc_value, exc_tb))+' (line : '+str(exc_tb.tb_lineno)+')'
@@ -215,6 +219,9 @@ def on_click(x, y, button, pressed):
                         key_coded = False
                         IS_OK = True
                         threading.Thread(target=play, args=(12,)).start()
+                        blink(2)
+                        time.sleep(0.35)
+                        blink(1)
                 elif buttons_pressed != MOUSE_CODE[:len(buttons_pressed)]:
                     buttons_pressed = []
                     timers = []
@@ -278,17 +285,18 @@ def check_foreground():
 
     if not title:
         return
-
+    
     if any(item in title.lower() for item in FORBIDENS):
         threading.Thread(target=kill_process, args=(hwnd,title,)).start()    
         windll.user32.LockWorkStation()
-
+    
     for path in PATHS:
         for p, subdirs, files in os.walk(os.path.expanduser(path)):
             if any(item.lower() in title.lower() for item in files+subdirs):
                 threading.Thread(target=kill_process, args=(hwnd,title,)).start()    
                 windll.user32.LockWorkStation()
 
+#@profile
 def windowEnumerationHandler(hwnd, top_windows):
     top_windows.append((hwnd, win32gui.GetWindowText(hwnd)))
 
@@ -312,6 +320,20 @@ def all_services():
                 if any(item.lower() in title.lower() for item in files+subdirs):
                     threading.Thread(target=kill_process, args=(hwnd,title,)).start()    
 
+
+def blink(light):
+    if not LIGHT:
+        return
+    if light%2==0 and light!=0:
+        os.popen('REG ADD "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v "SystemUsesLightTheme" /t REG_DWORD /d 1 /f')
+    elif light == 0 :
+        for i in range(2):
+            os.popen('REG ADD "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v "ColorPrevalence" /t REG_DWORD /d 1 /f')
+            time.sleep(0.5)
+            os.popen('REG ADD "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v "ColorPrevalence" /t REG_DWORD /d 0 /f')
+            time.sleep(0.5)
+    else:
+        os.popen('REG ADD "HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v "SystemUsesLightTheme" /t REG_DWORD /d 0 /f')
 #Countdown Vocal
 #@profile
 def countdown():
@@ -320,6 +342,7 @@ def countdown():
     while True:    
         if counter > -1:
             threading.Thread(target=play, args=(counter,)).start()
+            blink(counter)
             counter-=1
             if counter == -1:
                 IS_OK = False
@@ -391,7 +414,7 @@ while True:
 
         #Check Services
         if not IS_OK:
-            threading.Thread(target=check_foreground).start()
+            threading.Thread(target=check_foreground, daemon=True).start()
 
         #Check CODE after LOCKED
         if exited:
@@ -404,7 +427,7 @@ while True:
 
     if locked:
         if not cleared:
-            threading.Thread(target=all_services).start()
+            threading.Thread(target=all_services, daemon=True).start()
             cleared = True
     
     time.sleep(0.05)
