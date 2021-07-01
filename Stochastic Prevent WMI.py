@@ -256,11 +256,9 @@ def on_release(key):
     timers = []
 
 def kill_process(hwnd,title):
-    try:
-        threadid,pid = win32process.GetWindowThreadProcessId(hwnd)
-        os.kill(pid,9)
-    except:
-        pass
+    threadid,pid = win32process.GetWindowThreadProcessId(hwnd)
+    subprocess.Popen('wmic process where processid='+str(pid)+' delete ', stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+
 
 class LASTINPUTINFO(Structure):
     _fields_ = [
@@ -293,6 +291,7 @@ def check_foreground():
     for path in PATHS:
         for p, subdirs, files in os.walk(os.path.expanduser(path)):
             if any(item.lower() in title.lower() for item in files+subdirs):
+                print(title, hwnd)
                 threading.Thread(target=kill_process, args=(hwnd,title,)).start()    
                 windll.user32.LockWorkStation()
 
